@@ -39,7 +39,7 @@ def generate_content(client: OpenAI, messages: list, verbose: bool = False) -> N
     response = client.chat.completions.create(
         model="openrouter/free",
         messages=messages,
-        tools=available_functions,
+        tools=available_functions, # type: ignore
     )
     message = response.choices[0].message
     if not response.usage:
@@ -49,8 +49,8 @@ def generate_content(client: OpenAI, messages: list, verbose: bool = False) -> N
         print(f"Response tokens: {response.usage.completion_tokens}")
     if message.tool_calls:
         for tool_call in message.tool_calls:
-            function_args = json.loads(tool_call.function.arguments or "{}")
-            print(f"Calling function: {tool_call.function.name}({function_args})")
+            function_args = json.loads(tool_call.function.arguments or "{}") # type: ignore
+            print(f"Calling function: {tool_call.function.name}({function_args})") # type: ignore
     else:
         print(message.content)
 
