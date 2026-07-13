@@ -3,8 +3,9 @@ from dotenv import load_dotenv
 from openai import OpenAI
 import argparse
 from prompts import system_prompt
-from call_function import available_functions
+from call_function import available_functions, call_function
 import json
+import sys
 
 load_dotenv()
 api_key = os.environ.get("OPENROUTER_API_KEY")
@@ -31,28 +32,43 @@ def main():
     ]
     if args.verbose:
         print(f"User prompt: {args.user_prompt}\n")
-
     generate_content(client, messages, args.verbose)
 
 
 def generate_content(client: OpenAI, messages: list, verbose: bool = False) -> None:
-    response = client.chat.completions.create(
+    for _ in range(20):
+        response = call_model(client, messages)
+        message = response.choices[0].message
+        if not response.usage:
+            raise RuntimeError("API response appears to be malformed")
+        if verbose:
+            print(f"Prompt tokens: {response.usage.prompt_tokens}")
+            print(f"Response tokens: {response.usage.completion_tokens}")
+        messages.append(message)
+        if message.tool_calls:
+            for tool_call in message.tool_calls:
+                result_message = call_function(tool_call, verbose)
+                # function_args = json.loads(tool_call.function.arguments or "{}") # type: ignore
+                # print(f"Calling function: {tool_call.function.name}({function_args})") # type: ignore
+                messages.append(result_message)
+                if result_message["content"] == "":
+                    raise Exception("This is empty")
+                if verbose:
+                    print(f"-> {result_message['content']}")
+        else:
+            print(message.content)
+            break
+    else:
+        print("Agent didn't finish within the maximum number of iterations")
+        sys.exit(1)
+
+
+def call_model(client, messages):
+    return client.chat.completions.create(
         model="openrouter/free",
         messages=messages,
         tools=available_functions, # type: ignore
     )
-    message = response.choices[0].message
-    if not response.usage:
-        raise RuntimeError("API response appears to be malformed")
-    if verbose:
-        print(f"Prompt tokens: {response.usage.prompt_tokens}")
-        print(f"Response tokens: {response.usage.completion_tokens}")
-    if message.tool_calls:
-        for tool_call in message.tool_calls:
-            function_args = json.loads(tool_call.function.arguments or "{}") # type: ignore
-            print(f"Calling function: {tool_call.function.name}({function_args})") # type: ignore
-    else:
-        print(message.content)
 
 
 if __name__ == "__main__":
